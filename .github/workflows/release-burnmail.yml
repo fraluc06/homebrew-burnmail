@@ -15,9 +15,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Update formula with bump-homebrew-formula-action
         uses: mislav/bump-homebrew-formula-action@v3
         with:
@@ -138,7 +135,8 @@ jobs:
           mkdir -p release-bottles
           cp bottles/*.bottle.*.tar.gz release-bottles/ 2>/dev/null || true
           
-          if [ $(ls -1 release-bottles/*.tar.gz 2>/dev/null | wc -l) -eq 0 ]; then
+          bottle_count=$(find release-bottles -name "*.tar.gz" -type f | wc -l)
+          if [ "$bottle_count" -eq 0 ]; then
             echo "Error: No bottle files to upload!"
             exit 1
           fi
@@ -179,9 +177,9 @@ jobs:
           cd bottles
           
           echo "Merging bottle JSONs with root_url: $ROOT_URL"
-          ls -1 *.json
+          ls -1 ./*.json
           
-          brew bottle --merge --write --root-url="$ROOT_URL" *.json
+          brew bottle --merge --write --root-url="$ROOT_URL" ./*.json
           
           cd ..
 
