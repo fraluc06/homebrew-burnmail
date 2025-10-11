@@ -10,25 +10,41 @@ on:
 
 jobs:
   update-formula:
-    name: Update formula and build bottles
+    name: Update formula version
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
-      - name: Update formula with bump-homebrew-formula-action
+      - name: Update burnmail formula
         uses: mislav/bump-homebrew-formula-action@v3
         with:
           formula-name: burnmail
           formula-path: Formula/burnmail.rb
           homebrew-tap: fraluc06/homebrew-burnmail
           base-branch: main
+          create-branch: true
+          create-pullrequest: true
+          tag-name: v${{ inputs.version }}
           download-url: https://github.com/fraluc06/Burnmail/archive/refs/tags/v${{ inputs.version }}.tar.gz
-          commit-message: |
-            Update burnmail to v${{ inputs.version }}
-            
-            🤖 Updated with bump-homebrew-formula-action
         env:
-          COMMITTER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
+
+      - name: Auto-merge PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Waiting for PR to be created..."
+          sleep 10
+          
+          PR_NUMBER=$(gh pr list --head "bump-burnmail-${{ inputs.version }}" --json number --jq '.[0].number')
+          
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Found PR #$PR_NUMBER, merging..."
+            gh pr merge "$PR_NUMBER" --auto --squash
+          else
+            echo "No PR found, skipping auto-merge"
+          fi
 
   build-bottles:
     name: Build bottles
@@ -41,6 +57,9 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Wait for formula update to be merged
+        run: sleep 30
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -55,11 +74,15 @@ jobs:
       - name: Build bottle
         run: |
           brew tap fraluc06/burnmail "$GITHUB_WORKSPACE"
+
           brew deps --include-build fraluc06/burnmail/burnmail | xargs -n1 brew install || true
+
           brew install --build-bottle fraluc06/burnmail/burnmail
+
           brew bottle --json --only-json-tab fraluc06/burnmail/burnmail
 
       - name: Upload bottles as artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bottles_${{ matrix.os }}
@@ -68,9 +91,109 @@ jobs:
             *.json
           retention-days: 1
 
-  publish-and-update:
-    name: Publish bottles and update formula
+  publish-bottles:
+    name: Publish bottles to release
     needs: build-bottles
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all bottle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bottles_*
+          merge-multiple: true
+          path: bottles
+
+      - name: Validate and prepare bottles for release
+        run: |
+          echo "Validating bottles for release..."
+
+          rm -f bottles/*.json
+
+          echo "Renaming bottles to fix double-dash issue..."
+          cd bottles
+          for file in *--*.bottle.*.tar.gz; do
+            if [ -f "$file" ]; then
+              newname="${file/--/-}"
+              echo "Renaming: $file -> $newname"
+              mv "$file" "$newname"
+            fi
+          done
+
+          echo "Removing rebuild numbers from bottle filenames..."
+          for file in *.bottle.[0-9]*.tar.gz; do
+            if [ -f "$file" ]; then
+              newname=$(echo "$file" | sed -E 's/\.bottle\.[0-9]+/.bottle/')
+              echo "Renaming: $file -> $newname"
+              mv "$file" "$newname"
+            fi
+          done
+          cd ..
+
+          bottle_count=$(find bottles -name "*.bottle.*" -type f | wc -l)
+
+          if [ "$bottle_count" -eq 0 ]; then
+            echo "Error: No bottle files to publish!"
+            exit 1
+          fi
+
+          echo "Found $bottle_count bottle files to publish:"
+          ls -lah bottles/
+
+      - name: Create or update Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: burnmail-v${{ inputs.version }}
+        run: |
+          if gh release view "$TAG_NAME" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists, uploading bottles to existing release..."
+
+            for bottle in bottles/*; do
+              echo "Uploading $(basename "$bottle")..."
+              gh release upload "$TAG_NAME" "$bottle" \
+                --repo ${{ github.repository }} \
+                --clobber
+            done
+          else
+            echo "Creating new release $TAG_NAME..."
+
+            gh release create "$TAG_NAME" \
+              --repo ${{ github.repository }} \
+              --title "burnmail v${{ inputs.version }}" \
+              --notes "Pre-compiled bottles for burnmail v${{ inputs.version }}
+
+          **Supported platforms:**
+          - macOS 13 (Ventura)
+          - macOS 14 (Sonoma)
+          - macOS 15 (Sequoia)
+          - macOS 26 (Tahoe)
+          - Ubuntu 24.04
+
+          **Installation:**
+          \`\`\`bash
+          brew install fraluc06/burnmail/burnmail
+          \`\`\`
+
+          🤖 Built with GitHub Actions" \
+              bottles/*
+          fi
+
+      - name: Verify release and list assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: burnmail-v${{ inputs.version }}
+        run: |
+          echo "Release $TAG_NAME created/updated successfully!"
+          echo "Assets in release:"
+          gh release view "$TAG_NAME" --repo ${{ github.repository }} --json assets --jq '.assets[].name'
+
+  update-formula-with-bottles:
+    name: Update formula with bottle blocks
+    needs: publish-bottles
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -92,137 +215,103 @@ jobs:
           merge-multiple: true
           path: bottles
 
-      - name: Validate and prepare bottles for release
+      - name: Validate downloaded bottles
         run: |
-          echo "Validating bottles..."
-          
+          echo "Validating downloaded bottles..."
           json_count=$(find bottles -name "*.json" -type f | wc -l)
           bottle_count=$(find bottles -name "*.bottle.*" ! -name "*.json" -type f | wc -l)
-          
+
           echo "Found $json_count JSON files and $bottle_count bottle files"
-          
-          if [ "$json_count" -eq 0 ] || [ "$bottle_count" -eq 0 ]; then
-            echo "Error: Missing bottle files!"
+
+          if [ "$json_count" -eq 0 ]; then
+            echo "Error: No JSON files found!"
             exit 1
           fi
-          
-          # Fix double-dash and rebuild numbers in bottle filenames
-          cd bottles
-          for file in *--*.bottle.*.tar.gz; do
-            if [ -f "$file" ]; then
-              mv "$file" "${file/--/-}"
-            fi
-          done
-          
-          for file in *.bottle.[0-9]*.tar.gz; do
-            if [ -f "$file" ]; then
-              newname=$(echo "$file" | sed -E 's/\.bottle\.[0-9]+/.bottle/')
-              mv "$file" "$newname"
-            fi
-          done
-          cd ..
-          
-          echo "Prepared bottles:"
+
+          if [ "$bottle_count" -eq 0 ]; then
+            echo "Error: No bottle files found!"
+            exit 1
+          fi
+
+          echo "Contents:"
           ls -lah bottles/
 
-      - name: Create Release and upload bottles
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: burnmail-v${{ inputs.version }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          # Copy bottles without JSON for release
-          mkdir -p release-bottles
-          cp bottles/*.bottle.*.tar.gz release-bottles/ 2>/dev/null || true
-          
-          bottle_count=$(find release-bottles -name "*.tar.gz" -type f | wc -l)
-          if [ "$bottle_count" -eq 0 ]; then
-            echo "Error: No bottle files to upload!"
-            exit 1
-          fi
-          
-          echo "Creating release $TAG_NAME..."
-          
-          cat > release-notes.md <<EOF
-          ## burnmail v${VERSION}
-          
-          Supported platforms:
-          - macOS 13 (Ventura)
-          - macOS 14 (Sonoma)
-          - macOS 15 (Sequoia)
-          - macOS 26 (Tahoe)
-          - Ubuntu 24.04
-          
-          Installation:
-          \`\`\`bash
-          brew install fraluc06/burnmail/burnmail
-          \`\`\`
-          
-          🤖 Built with GitHub Actions
-          EOF
-          
-          gh release create "$TAG_NAME" \
-            --repo ${{ github.repository }} \
-            --title "burnmail v${VERSION}" \
-            --notes-file release-notes.md \
-            release-bottles/*.tar.gz
-
-      - name: Tap repository and merge bottles
-        env:
-          ROOT_URL: https://github.com/${{ github.repository }}/releases/download/burnmail-v${{ inputs.version }}
+      - name: Tap repository locally
         run: |
           brew untap fraluc06/burnmail 2>/dev/null || true
+
           brew tap fraluc06/burnmail "$GITHUB_WORKSPACE"
-          
-          cd bottles
-          
-          echo "Merging bottle JSONs with root_url: $ROOT_URL"
-          ls -1 ./*.json
-          
-          brew bottle --merge --write --root-url="$ROOT_URL" ./*.json
-          
-          cd ..
 
       - name: Configure Git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Update formula with bottles
+      - name: Merge bottle JSON into formula
+        env:
+          ROOT_URL: https://github.com/${{ github.repository }}/releases/download/burnmail-v${{ inputs.version }}
+        run: |
+          cd bottles
+
+          if ! compgen -G "*.json" > /dev/null; then
+            echo "Error: No JSON files to merge"
+            exit 1
+          fi
+
+          echo "Merging bottle JSONs into formula with root_url: $ROOT_URL"
+          ls -1 ./*.json
+
+          if ! brew bottle --merge --write --root-url="$ROOT_URL" ./*.json; then
+            echo "Error: Failed to merge bottle JSONs"
+            exit 1
+          fi
+
+          cd ..
+
+      - name: Copy formula from tap and push
         env:
           ROOT_URL: https://github.com/${{ github.repository }}/releases/download/burnmail-v${{ inputs.version }}
         run: |
           TAP_PATH=$(brew --repository fraluc06/burnmail)
+          echo "Tap path: $TAP_PATH"
+          echo "Workspace: $GITHUB_WORKSPACE"
+
           cp "$TAP_PATH/Formula/burnmail.rb" Formula/burnmail.rb
-          
-          # Verify bottle block
-          if ! grep -q "bottle do" Formula/burnmail.rb; then
-            echo "Error: No bottle block found!"
+
+          echo "Verifying formula was updated..."
+          if grep -q "bottle do" Formula/burnmail.rb; then
+            echo "✓ Bottle block found in formula"
+
+            if ! grep -q "root_url" Formula/burnmail.rb; then
+              echo "⚠️  root_url missing, adding it..."
+              sed -i.bak "/bottle do/a\\    root_url \"$ROOT_URL\"" Formula/burnmail.rb
+              rm -f Formula/burnmail.rb.bak
+            fi
+
+            if grep -q "rebuild" Formula/burnmail.rb; then
+              echo "⚠️  Removing rebuild number..."
+              sed -i.bak '/^[[:space:]]*rebuild /d' Formula/burnmail.rb
+              rm -f Formula/burnmail.rb.bak
+            fi
+
+            echo "Bottle block content:"
+            sed -n '/bottle do/,/^  end$/p' Formula/burnmail.rb
+          else
+            echo "Error: No bottle block found in formula after merge"
             exit 1
           fi
-          
-          echo "✓ Bottle block found in formula"
-          
-          # Ensure root_url is present
-          if ! grep -q "root_url" Formula/burnmail.rb; then
-            echo "Adding root_url..."
-            sed -i.bak "/bottle do/a\\    root_url \"$ROOT_URL\"" Formula/burnmail.rb
-            rm -f Formula/burnmail.rb.bak
-          fi
-          
-          # Remove rebuild if present
-          if grep -q "rebuild" Formula/burnmail.rb; then
-            echo "Removing rebuild number..."
-            sed -i.bak '/^[[:space:]]*rebuild /d' Formula/burnmail.rb
-            rm -f Formula/burnmail.rb.bak
-          fi
-          
-          echo "Final formula bottle block:"
-          sed -n '/bottle do/,/^  end$/p' Formula/burnmail.rb
 
-      - name: Commit and push updated formula
-        run: |
-          git pull --rebase
+          git pull --rebase origin main
           git add Formula/burnmail.rb
-          git commit -m "Add bottles for burnmail v${{ inputs.version }}"
-          git push
+          git commit -m "Add bottles for burnmail v${{ inputs.version }}
+
+          Bottles built for:
+          - macOS 13 (Ventura)
+          - macOS 14 (Sonoma)
+          - macOS 15 (Sequoia)
+          - macOS 26 (Tahoe)
+          - Ubuntu 24.04
+
+          🤖 Generated with GitHub Actions"
+
+          git push origin main
