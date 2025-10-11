@@ -30,6 +30,9 @@ jobs:
         env:
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
 
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Auto-merge PR
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
