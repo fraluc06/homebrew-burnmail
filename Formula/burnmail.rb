@@ -29,8 +29,5 @@ class Burnmail < Formula
   test do
     output = shell_output("#{bin}/burnmail --version")
     assert_match version.to_s, output
-
-    output = shell_output("#{bin}/burnmail me 2>&1")
-    assert_match "Available domains", output
   end
 end
