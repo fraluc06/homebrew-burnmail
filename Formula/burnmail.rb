@@ -30,7 +30,7 @@ class Burnmail < Formula
     output = shell_output("#{bin}/burnmail --version")
     assert_match version.to_s, output
 
-    output = shell_output("#{bin}/burnmail domains 2>&1")
+    output = shell_output("#{bin}/burnmail me 2>&1")
     assert_match "Available domains", output
   end
 end
