@@ -7,7 +7,7 @@ class Burnmail < Formula
   head "https://github.com/fraluc06/burnmail.git", branch: "main"
 
   bottle do
-    root_url "https://github.com/fraluc06/homebrew-burnmail/releases/download/burnmail-v1.0.1-bottles"
+    root_url "https://github.com/fraluc06/homebrew-burnmail/releases/download/burnmail-v1.2.0-bottles"
     sha256 cellar: :any_skip_relocation, arm64_tahoe:   "01ec39c7a5dacffa6dc277685ff9fcd2eb2e98e1b1a956d6df514d2bb6e4e5f0"
     sha256 cellar: :any_skip_relocation, arm64_sequoia: "01ec39c7a5dacffa6dc277685ff9fcd2eb2e98e1b1a956d6df514d2bb6e4e5f0"
     sha256 cellar: :any_skip_relocation, arm64_sonoma:  "01ec39c7a5dacffa6dc277685ff9fcd2eb2e98e1b1a956d6df514d2bb6e4e5f0"
