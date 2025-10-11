@@ -1,8 +1,8 @@
 class Burnmail < Formula
   desc "Simple CLI tool to generate and manage temporary email addresses with TUI"
   homepage "https://github.com/fraluc06/burnmail"
-  url "https://github.com/fraluc06/burnmail/archive/refs/tags/v1.0.1.tar.gz"
-  sha256 "aee5434160f29b034994644d2e57b3da951d5fb11b25949dca59148269b5c513"
+  url "https://github.com/fraluc06/Burnmail/archive/refs/tags/v1.2.0.tar.gz"
+  sha256 "fc5df6f438574f7f16d6fc248f97f2cf36893ac9338ad33c79b3f3fbdc851270"
   license "MIT"
   head "https://github.com/fraluc06/burnmail.git", branch: "main"
 
