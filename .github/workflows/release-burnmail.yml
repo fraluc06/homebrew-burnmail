@@ -168,8 +168,8 @@ jobs:
 
             gh release create "$TAG_NAME" \
               --repo ${{ github.repository }} \
-              --title "Bottles for Burnmail v${{ inputs.version }}" \
-              --notes "Pre-compiled bottles for burnmail v${{ inputs.version }}
+              --title "Bottles for Burnmail ${{ inputs.version }}" \
+              --notes "Pre-compiled bottles for burnmail ${{ inputs.version }}
 
           **Supported platforms:**
           - macOS 13 (Ventura)
