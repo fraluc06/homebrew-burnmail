@@ -304,6 +304,7 @@ jobs:
             exit 1
           fi
 
+          git pull --rebase origin main
           git add Formula/burnmail.rb
           git commit -m "Add bottles for burnmail v${{ inputs.version }}
 
@@ -316,5 +317,4 @@ jobs:
 
           🤖 Generated with GitHub Actions"
 
-          git pull --rebase origin main
           git push origin main
