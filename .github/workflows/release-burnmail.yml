@@ -307,7 +307,13 @@ jobs:
           fi
 
           git pull --rebase origin main
-          git add Formula/burnmail.rb
+          git add -f Formula/burnmail.rb
+          
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          
           git commit -m "Add bottles for burnmail v${{ inputs.version }}
 
           Bottles built for:
