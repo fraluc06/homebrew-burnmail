@@ -12,6 +12,8 @@ jobs:
   update-formula:
     name: Update formula version
     runs-on: ubuntu-latest
+    outputs:
+      pr_created: ${{ steps.bump.outputs.pull_request }}
     permissions:
       contents: write
       pull-requests: write
@@ -326,3 +328,17 @@ jobs:
           🤖 Generated with GitHub Actions"
 
           git push origin main
+
+      - name: Delete bump branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME="bump-burnmail-v${{ inputs.version }}"
+          
+          if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+            echo "Deleting branch $BRANCH_NAME..."
+            git push origin --delete "$BRANCH_NAME"
+            echo "Branch deleted successfully"
+          else
+            echo "Branch $BRANCH_NAME not found, skipping deletion"
+          fi
