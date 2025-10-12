@@ -26,8 +26,8 @@ jobs:
           base-branch: main
           create-branch: true
           create-pullrequest: true
-          tag-name: v${{ inputs.version }}
-          download-url: https://github.com/fraluc06/Burnmail/archive/refs/tags/v${{ inputs.version }}.tar.gz
+          tag-name: ${{ inputs.version }}
+          download-url: https://github.com/fraluc06/Burnmail/archive/refs/tags/${{ inputs.version }}.tar.gz
         env:
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
 
@@ -152,7 +152,7 @@ jobs:
       - name: Create or update Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: burnmail-v${{ inputs.version }}
+          TAG_NAME: burnmail-${{ inputs.version }}
         run: |
           if gh release view "$TAG_NAME" --repo ${{ github.repository }} >/dev/null 2>&1; then
             echo "Release $TAG_NAME already exists, uploading bottles to existing release..."
@@ -190,7 +190,7 @@ jobs:
       - name: Verify release and list assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: burnmail-v${{ inputs.version }}
+          TAG_NAME: burnmail-${{ inputs.version }}
         run: |
           echo "Release $TAG_NAME created/updated successfully!"
           echo "Assets in release:"
@@ -254,7 +254,7 @@ jobs:
 
       - name: Merge bottle JSON into formula
         env:
-          ROOT_URL: https://github.com/${{ github.repository }}/releases/download/burnmail-v${{ inputs.version }}
+          ROOT_URL: https://github.com/${{ github.repository }}/releases/download/burnmail-${{ inputs.version }}
         run: |
           cd bottles
 
@@ -275,7 +275,7 @@ jobs:
 
       - name: Copy formula from tap and push
         env:
-          ROOT_URL: https://github.com/${{ github.repository }}/releases/download/burnmail-v${{ inputs.version }}
+          ROOT_URL: https://github.com/${{ github.repository }}/releases/download/burnmail-${{ inputs.version }}
         run: |
           TAP_PATH=$(brew --repository fraluc06/burnmail)
           echo "Tap path: $TAP_PATH"
@@ -314,7 +314,7 @@ jobs:
             exit 0
           fi
           
-          git commit -m "Add bottles for burnmail v${{ inputs.version }}
+          git commit -m "Add bottles for burnmail ${{ inputs.version }}
 
           Bottles built for:
           - macOS 13 (Ventura)
