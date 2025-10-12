@@ -170,7 +170,7 @@ jobs:
 
             gh release create "$TAG_NAME" \
               --repo ${{ github.repository }} \
-              --title "burnmail v${{ inputs.version }}" \
+              --title "Bottles for Burnmail v${{ inputs.version }}" \
               --notes "Pre-compiled bottles for burnmail v${{ inputs.version }}
 
           **Supported platforms:**
